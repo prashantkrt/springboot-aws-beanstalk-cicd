@@ -124,7 +124,7 @@ jobs:
             --application-name springboot-aws-beanstalk-cicd \
             --environment-name springboot-aws-beanstalk-cicd-env \
             --solution-stack-name "$LATEST_STACK" \
-            --version-label ${{ github.sha }}\
+            --version-label ${{ github.sha }} \
             --option-settings Namespace=aws:autoscaling:launchconfiguration,OptionName=IamInstanceProfile,Value=aws-elasticbeanstalk-ec2-role
 
       # Step 10 — Deploy application version
@@ -133,13 +133,38 @@ jobs:
         run: |
           echo "Checking environment status..."
 
-          # This loop waits until the environment is 'Ready'
-          while [[ $(aws elasticbeanstalk describe-environments --environment-names springboot-aws-beanstalk-cicd-env --query "Environments[0].Status" --output text) != "Ready" ]]; do
-            echo "Environment is busy... waiting 30 seconds..."
+          MAX_RETRIES=20
+          COUNT=0
+
+          while true; do
+            STATUS=$(aws elasticbeanstalk describe-environments \
+              --environment-names springboot-aws-beanstalk-cicd-env \
+              --query "Environments[0].Status" \
+              --output text)
+
+            HEALTH=$(aws elasticbeanstalk describe-environments \
+              --environment-names springboot-aws-beanstalk-cicd-env \
+              --query "Environments[0].Health" \
+              --output text)
+
+            echo "Environment Status: $STATUS | Health: $HEALTH"
+
+            if [[ "$STATUS" == "Ready" && "$HEALTH" != "Red" ]]; then
+              echo "Environment is ready for deployment."
+              break
+            fi
+
+            if [[ $COUNT -ge $MAX_RETRIES ]]; then
+              echo "Environment did not become ready in time. Failing pipeline."
+              exit 1
+            fi
+
+            echo "Environment busy... waiting 30 seconds"
             sleep 30
+            COUNT=$((COUNT+1))
           done
 
-          echo "Environment is Ready! Starting deployment..."
+          echo "Starting deployment..."
 
           aws elasticbeanstalk update-environment \
             --environment-name springboot-aws-beanstalk-cicd-env \
