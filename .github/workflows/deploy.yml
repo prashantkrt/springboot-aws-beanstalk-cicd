@@ -20,26 +20,44 @@
 # /dev/null is a special file in Linux.  Anything sent there is discarded forever.
 # 2>/dev/null => Send error messages to /dev/null (trash)
 
+#  Elastic Beanstalk Concept Hierarchy:
+#  Elastic Beanstalk
+#  ↓
+#  Application
+#  ↓
+#  Environment
+#  ↓
+#  Application Version
+#  ↓
+#  Running Infrastructure (EC2, Load balancer, etc.)
 
-
-name: Deploy Spring Boot App to AWS Elastic Beanstalk
+# springboot-aws-beanstalk-cicd
+# Application: springboot-aws-beanstalk-cicd
+#  ├── dev-env
+#  ├── staging-env
+#  └── prod-env
+#
+#Every deployment is a version.
+name: Spring Boot → AWS Elastic Beanstalk Deployment
 
 on:
   push:
     branches: [ main ]
 
 jobs:
+
   deploy:
 
     runs-on: ubuntu-latest
 
     steps:
 
-      #  Checkout repository code
+      # Step 1 — Checkout repository code
       - name: Checkout source code
         uses: actions/checkout@v4
 
-      # Install Java (Amazon Corretto 23)
+
+      # Step 2 — Install Java (Amazon Corretto 23)
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
@@ -47,12 +65,12 @@ jobs:
           java-version: '23'
 
 
-      # Build Spring Boot application
+      # Step 3 — Build Spring Boot application
       - name: Build application
         run: mvn clean package
 
 
-      # Configure AWS credentials
+      # Step 4 — Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -61,29 +79,32 @@ jobs:
           aws-region: ap-south-1
 
 
-      # Ensure S3 bucket exists
-      - name: Ensure S3 bucket exists
+      # Step 5 — Ensure S3 bucket exists
+      - name: Create S3 bucket if missing
         run: |
           aws s3api head-bucket --bucket springboot-beanstalk-artifacts 2>/dev/null \
           || aws s3 mb s3://springboot-beanstalk-artifacts
 
 
-      # 6️⃣ Upload built JAR to S3
+      # Step 6 — Upload JAR artifact to S3
       - name: Upload artifact to S3
         run: |
           aws s3 cp target/*.jar \
           s3://springboot-beanstalk-artifacts/app-${{ github.sha }}.jar
-          
 
-      # 7️⃣ Create Application if it doesn't exist
-      - name: Create EB Application
+
+      # Step 7 — Create Elastic Beanstalk Application (if missing)
+      - name: Create Elastic Beanstalk application
         run: |
-          aws elasticbeanstalk describe-applications --application-names springboot-aws-beanstalk-cicd 2>/dev/null \
-          || aws elasticbeanstalk create-application --application-name springboot-aws-beanstalk-cicd
+          aws elasticbeanstalk describe-applications \
+            --application-names springboot-aws-beanstalk-cicd 2>/dev/null \
+          || aws elasticbeanstalk create-application \
+            --application-name springboot-aws-beanstalk-cicd \
+            --description "Spring Boot CI/CD application"
 
 
-      # 7️⃣ Create new Elastic Beanstalk application version
-      - name: Create Elastic Beanstalk version
+      # Step 8 — Create Application Version
+      - name: Create Elastic Beanstalk application version
         run: |
           aws elasticbeanstalk create-application-version \
             --application-name springboot-aws-beanstalk-cicd \
@@ -91,13 +112,50 @@ jobs:
             --source-bundle S3Bucket=springboot-beanstalk-artifacts,S3Key=app-${{ github.sha }}.jar
 
 
-      # 8️⃣ Deploy application version to environment
-      - name: Deploy to Elastic Beanstalk
+      # Step 9 — Create Environment if it does not exist
+      - name: Create environment if missing
+        run: |
+          aws elasticbeanstalk describe-environments \
+            --application-name springboot-aws-beanstalk-cicd \
+            --environment-names springboot-aws-beanstalk-cicd-env \
+            --query "Environments[0].EnvironmentName" \
+            --output text 2>/dev/null \
+          || aws elasticbeanstalk create-environment \
+            --application-name springboot-aws-beanstalk-cicd \
+            --environment-name springboot-aws-beanstalk-cicd-env \
+            --solution-stack-name "64bit Amazon Linux 2023 v4.4.1 running Corretto 23"
+
+
+      # Step 10 — Deploy application version
+      - name: Deploy to Elastic Beanstalk environment
         run: |
           aws elasticbeanstalk update-environment \
             --environment-name springboot-aws-beanstalk-cicd-env \
-            --version-label ${{ github.sha }}
-#Step 1: You push code to GitHub.
+            --version-label ${{ github.sha }}#Step 1: You push code to GitHub.
+
+#Step1 :
 #Step 2: GitHub Actions sees the SHA for this push is 7fb3a12.
 #Step 3: The script tells AWS: "Create a new version called 7fb3a12 using the file I just uploaded to S3."
 #Step 4: The script then tells AWS: "Update my environment to use version 7fb3a12."
+
+#This pipeline will:
+#
+#  Checkout code
+#
+#  Install Java
+#
+#  Build Spring Boot app
+#
+#  Configure AWS credentials
+#
+#  Create S3 bucket (if missing)
+#
+#  Upload artifact
+#
+#  Create Elastic Beanstalk application
+#
+#  Create application version
+#
+#  Create environment (if missing)
+#
+#  Deploy version
