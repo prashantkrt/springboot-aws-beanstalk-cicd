@@ -123,7 +123,7 @@ jobs:
       - name: Create environment if missing
         run: |
           LATEST_STACK=$(aws elasticbeanstalk list-available-solution-stacks \
-               --query "SolutionStacks[?contains(@, 'Corretto')]|[0]" \
+              --query "SolutionStacks[?contains(@, 'Corretto') && !contains(@, 'Tomcat')]|[0]" \
                --output text)
 
           echo "Latest stack: $LATEST_STACK"
@@ -245,3 +245,14 @@ jobs:
 #  Create environment (if missing)
 #
 #  Deploy version
+
+
+## to use the app
+#  AWS Console
+# → Elastic Beanstalk
+# → Applications
+# → springboot-aws-beanstalk-cicd
+# → Environments
+# → springboot-aws-beanstalk-cicd-env
+# Environment URL
+# springboot-aws-beanstalk-cicd-env.eba-abc123.ap-south-1.elasticbeanstalk.com
