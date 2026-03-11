@@ -124,7 +124,8 @@ jobs:
             --application-name springboot-aws-beanstalk-cicd \
             --environment-name springboot-aws-beanstalk-cicd-env \
             --solution-stack-name "$LATEST_STACK" \
-            --version-label ${{ github.sha }}
+            --version-label ${{ github.sha }}\
+            --option-settings Namespace=aws:autoscaling:launchconfiguration,OptionName=IamInstanceProfile,Value=aws-elasticbeanstalk-ec2-role
 
       # Step 10 — Deploy application version
       #      — Wait for Environment to be "Ready" and then Deploy
