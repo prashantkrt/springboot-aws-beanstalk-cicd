@@ -157,6 +157,8 @@ jobs:
               --query "SolutionStacks[?contains(@, 'Corretto')]|[0]" \
               --output text)
 
+            echo "Using stack: $LATEST_STACK"
+
             aws elasticbeanstalk create-environment \
               --application-name springboot-aws-beanstalk-cicd \
               --environment-name springboot-aws-beanstalk-cicd-env \
@@ -167,15 +169,42 @@ jobs:
 
           echo "Waiting for environment to become Ready..."
 
-          aws elasticbeanstalk wait environment-updated \
-            --environment-names springboot-aws-beanstalk-cicd-env
+          MAX_RETRIES=40
+          COUNT=0
 
-          echo "Deploying application..."
+          while true; do
+            STATUS=$(aws elasticbeanstalk describe-environments \
+              --environment-names springboot-aws-beanstalk-cicd-env \
+              --query "Environments[0].Status" \
+              --output text)
+
+            HEALTH=$(aws elasticbeanstalk describe-environments \
+              --environment-names springboot-aws-beanstalk-cicd-env \
+              --query "Environments[0].Health" \
+              --output text)
+
+            echo "Environment Status: $STATUS | Health: $HEALTH"
+
+            if [[ "$STATUS" == "Ready" ]]; then
+              echo "Environment is Ready!"
+              break
+            fi
+
+            if [[ $COUNT -ge $MAX_RETRIES ]]; then
+              echo "Environment did not become ready in time."
+              exit 1
+            fi
+
+            echo "Environment busy... waiting 30 seconds..."
+            sleep 30
+            COUNT=$((COUNT+1))
+          done
+
+          echo "Starting deployment..."
 
           aws elasticbeanstalk update-environment \
             --environment-name springboot-aws-beanstalk-cicd-env \
-            --version-label ${{ github.sha }}
-#  {
+            --version-label ${{ github.sha }}#  {
 #    "SolutionStacks": [
 #      "64bit Amazon Linux 2023 v4.7.0 running Corretto 21",
 #      "64bit Amazon Linux 2023 v4.6.2 running Corretto 21",
