@@ -5,7 +5,11 @@
 #  @v2 -> version 2.x.x
 #  @V3 -> version 3.x.x
 #  @v4 -> version 4.x.x
+#  The github.sha is a long string of 40 characters (called a commit hash) that GitHub automatically generates every time you push code. It looks something like this: a1b2c3d4e5f6...
 
+#  The S3Key is simply the filename of your object inside the S3 bucket.
+#    S3Bucket: The name of the folder (the bucket).
+#    S3Key: The name of the file inside that folder.
 name: Deploy to Elastic Beanstalk
 
 on:
@@ -29,3 +33,33 @@ jobs:
       - name: Build
         run: mvn clean package
 
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: us-east-1
+
+      # This moves your compiled code from GitHub to AWS S3
+      - name: Upload JAR to S3
+        run: |
+          aws s3 cp target/*.jar s3://my-bucket/${{ github.sha }}.jar
+
+      - name: Create application version
+        run: |
+          aws elasticbeanstalk create-application-version \
+            --application-name my-app \
+            --version-label ${{ github.sha }} \
+            --source-bundle S3Bucket=my-bucket,S3Key=${{ github.sha }}.jar
+
+      - name: Deploy
+        run: |
+          aws elasticbeanstalk update-environment \
+            --environment-name my-env \
+            --version-label ${{ github.sha }}
+          
+
+#Step 1: You push code to GitHub.
+#Step 2: GitHub Actions sees the SHA for this push is 7fb3a12.
+#Step 3: The script tells AWS: "Create a new version called 7fb3a12 using the file I just uploaded to S3."
+#Step 4: The script then tells AWS: "Update my environment to use version 7fb3a12."
