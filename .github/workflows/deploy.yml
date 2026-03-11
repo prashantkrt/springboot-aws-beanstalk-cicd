@@ -127,8 +127,19 @@ jobs:
             --version-label ${{ github.sha }}
 
       # Step 10 — Deploy application version
-      - name: Deploy to Elastic Beanstalk environment
+      #      — Wait for Environment to be "Ready" and then Deploy
+      - name: Deploy to Elastic Beanstalk
         run: |
+          echo "Checking environment status..."
+
+          # This loop waits until the environment is 'Ready'
+          while [[ $(aws elasticbeanstalk describe-environments --environment-names springboot-aws-beanstalk-cicd-env --query "Environments[0].Status" --output text) != "Ready" ]]; do
+            echo "Environment is busy... waiting 30 seconds..."
+            sleep 30
+          done
+
+          echo "Environment is Ready! Starting deployment..."
+
           aws elasticbeanstalk update-environment \
             --environment-name springboot-aws-beanstalk-cicd-env \
             --version-label ${{ github.sha }}
