@@ -97,10 +97,11 @@ jobs:
       - name: Create Elastic Beanstalk application
         run: |
           aws elasticbeanstalk describe-applications \
-            --application-names springboot-aws-beanstalk-cicd 2>/dev/null \
+          --application-names springboot-aws-beanstalk-cicd \
+          --query "Applications[0].ApplicationName" \
+          --output text 2>/dev/null \
           || aws elasticbeanstalk create-application \
-            --application-name springboot-aws-beanstalk-cicd \
-            --description "Spring Boot CI/CD application"
+          --application-name springboot-aws-beanstalk-cicd
 
 
       # Step 8 — Create Application Version
