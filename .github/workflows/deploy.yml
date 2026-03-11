@@ -10,7 +10,19 @@
 #  The S3Key is simply the filename of your object inside the S3 bucket.
 #    S3Bucket: The name of the folder (the bucket).
 #    S3Key: The name of the file inside that folder.
-name: Deploy to Elastic Beanstalk
+
+#  remember this
+#  When a command runs, it can produce two streams.
+#  | Stream          | Number | Meaning        |
+#  | --------------- | ------ | -------------- |
+#  | Standard Output |  1     | normal result  |
+#  | Error Output    |  2     | error messages |
+# /dev/null is a special file in Linux.  Anything sent there is discarded forever.
+# 2>/dev/null => Send error messages to /dev/null (trash)
+
+
+
+name: Deploy Spring Boot App to AWS Elastic Beanstalk
 
 on:
   push:
@@ -18,21 +30,29 @@ on:
 
 jobs:
   deploy:
+
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Code
+
+      #  Checkout repository code
+      - name: Checkout source code
         uses: actions/checkout@v4
 
+      # Install Java (Amazon Corretto 23)
       - name: Setup Java
         uses: actions/setup-java@v4
         with:
-          distribution: 'corretto'
+          distribution: corretto
           java-version: '23'
 
-      - name: Build
+
+      # Build Spring Boot application
+      - name: Build application
         run: mvn clean package
 
+
+      # Configure AWS credentials
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
@@ -40,25 +60,36 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
 
-      # This moves your compiled code from GitHub to AWS S3
-      - name: Upload JAR to S3
-        run: |
-          aws s3 cp target/*.jar s3://my-bucket/${{ github.sha }}.jar
 
-      - name: Create application version
+      # Ensure S3 bucket exists
+      - name: Ensure S3 bucket exists
+        run: |
+          aws s3api head-bucket --bucket springboot-beanstalk-artifacts 2>/dev/null \
+          || aws s3 mb s3://springboot-beanstalk-artifacts
+
+
+      # 6️⃣ Upload built JAR to S3
+      - name: Upload artifact to S3
+        run: |
+          aws s3 cp target/*.jar \
+          s3://springboot-beanstalk-artifacts/app-${{ github.sha }}.jar
+
+
+      # 7️⃣ Create new Elastic Beanstalk application version
+      - name: Create Elastic Beanstalk version
         run: |
           aws elasticbeanstalk create-application-version \
-            --application-name my-app \
+            --application-name springboot-aws-beanstalk-cicd \
             --version-label ${{ github.sha }} \
-            --source-bundle S3Bucket=my-bucket,S3Key=${{ github.sha }}.jar
+            --source-bundle S3Bucket=springboot-beanstalk-artifacts,S3Key=app-${{ github.sha }}.jar
 
-      - name: Deploy
+
+      # 8️⃣ Deploy application version to environment
+      - name: Deploy to Elastic Beanstalk
         run: |
           aws elasticbeanstalk update-environment \
-            --environment-name my-env \
+            --environment-name springboot-aws-beanstalk-cicd-env \
             --version-label ${{ github.sha }}
-          
-
 #Step 1: You push code to GitHub.
 #Step 2: GitHub Actions sees the SHA for this push is 7fb3a12.
 #Step 3: The script tells AWS: "Create a new version called 7fb3a12 using the file I just uploaded to S3."
