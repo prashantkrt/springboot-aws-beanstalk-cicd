@@ -94,15 +94,11 @@ jobs:
 
 
       # Step 7 — Create Elastic Beanstalk Application (if missing)
-      - name: Create Elastic Beanstalk application
+      # Check if the app exists. If grep finds nothing, it returns an error, triggering the '||'
+      - name: Create EB Application
         run: |
-          aws elasticbeanstalk describe-applications \
-          --application-names springboot-aws-beanstalk-cicd \
-          --query "Applications[0].ApplicationName" \
-          --output text 2>/dev/null \
-          || aws elasticbeanstalk create-application \
-          --application-name springboot-aws-beanstalk-cicd
-
+            aws elasticbeanstalk describe-applications --query "Applications[*].ApplicationName" --output text | grep -q "springboot-aws-beanstalk-cicd" \
+            || (aws elasticbeanstalk create-application --application-name springboot-aws-beanstalk-cicd && sleep 5)
 
       # Step 8 — Create Application Version
       - name: Create Elastic Beanstalk application version
@@ -116,16 +112,12 @@ jobs:
       # Step 9 — Create Environment if it does not exist
       - name: Create environment if missing
         run: |
-          aws elasticbeanstalk describe-environments \
-            --application-name springboot-aws-beanstalk-cicd \
-            --environment-names springboot-aws-beanstalk-cicd-env \
-            --query "Environments[0].EnvironmentName" \
-            --output text 2>/dev/null \
-          || aws elasticbeanstalk create-environment \
-            --application-name springboot-aws-beanstalk-cicd \
-            --environment-name springboot-aws-beanstalk-cicd-env \
-            --solution-stack-name "64bit Amazon Linux 2023 v4.4.1 running Corretto 23"
-
+            # Check if environment exists
+            aws elasticbeanstalk describe-environments --application-name springboot-aws-beanstalk-cicd --query "Environments[*].EnvironmentName" --output text | grep -q "springboot-aws-beanstalk-cicd-env" \
+            || aws elasticbeanstalk create-environment \
+              --application-name springboot-aws-beanstalk-cicd \
+              --environment-name springboot-aws-beanstalk-cicd-env \
+              --solution-stack-name "64bit Amazon Linux 2023 v4.4.1 running Corretto 23"
 
       # Step 10 — Deploy application version
       - name: Deploy to Elastic Beanstalk environment
