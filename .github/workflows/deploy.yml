@@ -112,21 +112,43 @@ jobs:
       # Step 9 — Create Environment if it does not exist
       - name: Create environment if missing
         run: |
-            # Check if environment exists
-            aws elasticbeanstalk describe-environments --application-name springboot-aws-beanstalk-cicd --query "Environments[*].EnvironmentName" --output text | grep -q "springboot-aws-beanstalk-cicd-env" \
-            || aws elasticbeanstalk create-environment \
-              --application-name springboot-aws-beanstalk-cicd \
-              --environment-name springboot-aws-beanstalk-cicd-env \
-              --solution-stack-name "64bit Amazon Linux 2023 v4.4.1 running Corretto 21"
+          LATEST_STACK=$(aws elasticbeanstalk list-available-solution-stacks \
+               --query "SolutionStacks[?contains(@, 'Corretto')]|[0]" \
+               --output text)
+
+          echo "Latest stack: $LATEST_STACK"
+      
+          # Check if environment exists
+          aws elasticbeanstalk describe-environments --application-name springboot-aws-beanstalk-cicd --query "Environments[*].EnvironmentName" --output text | grep -q "springboot-aws-beanstalk-cicd-env" \
+          || aws elasticbeanstalk create-environment \
+            --application-name springboot-aws-beanstalk-cicd \
+            --environment-name springboot-aws-beanstalk-cicd-env \
+            --solution-stack-name "$LATEST_STACK" \
+            --version-label ${{ github.sha }}
 
       # Step 10 — Deploy application version
       - name: Deploy to Elastic Beanstalk environment
         run: |
           aws elasticbeanstalk update-environment \
             --environment-name springboot-aws-beanstalk-cicd-env \
-            --version-label ${{ github.sha }}#Step 1: You push code to GitHub.
+            --version-label ${{ github.sha }}
 
-#Step1 :
+#  {
+#    "SolutionStacks": [
+#      "64bit Amazon Linux 2023 v4.7.0 running Corretto 21",
+#      "64bit Amazon Linux 2023 v4.6.2 running Corretto 21",
+#      "64bit Amazon Linux 2023 v4.5.0 running Corretto 17",
+#      "64bit Amazon Linux 2 v3.8.5 running Tomcat 9"
+#    ]
+#  }
+
+#  | Part         | Meaning                        |
+#  | ------------ | ------------------------------ |
+#  | `?`          | filter elements                |
+#  | `contains()` | check if string contains value |
+#  | `@`          | current element in the list    |
+
+#Step 1: You push code to GitHub.
 #Step 2: GitHub Actions sees the SHA for this push is 7fb3a12.
 #Step 3: The script tells AWS: "Create a new version called 7fb3a12 using the file I just uploaded to S3."
 #Step 4: The script then tells AWS: "Update my environment to use version 7fb3a12."
