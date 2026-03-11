@@ -73,6 +73,13 @@ jobs:
         run: |
           aws s3 cp target/*.jar \
           s3://springboot-beanstalk-artifacts/app-${{ github.sha }}.jar
+          
+
+      # 7️⃣ Create Application if it doesn't exist
+      - name: Create EB Application
+        run: |
+          aws elasticbeanstalk describe-applications --application-names springboot-aws-beanstalk-cicd 2>/dev/null \
+          || aws elasticbeanstalk create-application --application-name springboot-aws-beanstalk-cicd
 
 
       # 7️⃣ Create new Elastic Beanstalk application version
