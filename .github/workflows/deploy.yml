@@ -38,6 +38,16 @@
 #  └── prod-env
 #
 #Every deployment is a version.
+# In AWS Elastic Beanstalk an environment lifecycle looks like this:
+#Launching
+#   ↓
+#Ready
+#   ↓
+#Updating
+#   ↓
+#Terminating
+#   ↓
+#Terminated
 name: Spring Boot → AWS Elastic Beanstalk Deployment
 
 on:
@@ -133,43 +143,38 @@ jobs:
         run: |
           echo "Checking environment status..."
 
-          MAX_RETRIES=20
-          COUNT=0
+          STATUS=$(aws elasticbeanstalk describe-environments \
+            --environment-names springboot-aws-beanstalk-cicd-env \
+            --query "Environments[0].Status" \
+            --output text)
 
-          while true; do
-            STATUS=$(aws elasticbeanstalk describe-environments \
-              --environment-names springboot-aws-beanstalk-cicd-env \
-              --query "Environments[0].Status" \
+          echo "Current environment status: $STATUS"
+
+          if [[ "$STATUS" == "Terminated" || "$STATUS" == "None" ]]; then
+            echo "Environment missing or terminated. Creating environment..."
+
+            LATEST_STACK=$(aws elasticbeanstalk list-available-solution-stacks \
+              --query "SolutionStacks[?contains(@, 'Corretto')]|[0]" \
               --output text)
 
-            HEALTH=$(aws elasticbeanstalk describe-environments \
-              --environment-names springboot-aws-beanstalk-cicd-env \
-              --query "Environments[0].Health" \
-              --output text)
+            aws elasticbeanstalk create-environment \
+              --application-name springboot-aws-beanstalk-cicd \
+              --environment-name springboot-aws-beanstalk-cicd-env \
+              --solution-stack-name "$LATEST_STACK" \
+              --version-label ${{ github.sha }} \
+              --option-settings Namespace=aws:autoscaling:launchconfiguration,OptionName=IamInstanceProfile,Value=aws-elasticbeanstalk-ec2-role
+          fi
 
-            echo "Environment Status: $STATUS | Health: $HEALTH"
+          echo "Waiting for environment to become Ready..."
 
-            if [[ "$STATUS" == "Ready" && "$HEALTH" != "Red" ]]; then
-              echo "Environment is ready for deployment."
-              break
-            fi
+          aws elasticbeanstalk wait environment-updated \
+            --environment-names springboot-aws-beanstalk-cicd-env
 
-            if [[ $COUNT -ge $MAX_RETRIES ]]; then
-              echo "Environment did not become ready in time. Failing pipeline."
-              exit 1
-            fi
-
-            echo "Environment busy... waiting 30 seconds"
-            sleep 30
-            COUNT=$((COUNT+1))
-          done
-
-          echo "Starting deployment..."
+          echo "Deploying application..."
 
           aws elasticbeanstalk update-environment \
             --environment-name springboot-aws-beanstalk-cicd-env \
             --version-label ${{ github.sha }}
-
 #  {
 #    "SolutionStacks": [
 #      "64bit Amazon Linux 2023 v4.7.0 running Corretto 21",
